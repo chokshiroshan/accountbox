@@ -39,6 +39,16 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Releasing version: $VERSION"
 
+      - name: Validate tag matches package.json
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION_NO_V" != "$PKG_VERSION" ]; then
+            echo "Tag/package.json mismatch: tag=$VERSION_NO_V package.json=$PKG_VERSION"
+            exit 1
+          fi
+
       - name: Check if prerelease
         id: check_prerelease
         run: |
@@ -176,40 +186,6 @@ jobs:
           npm publish accountbox-*.tgz --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-homebrew:
-    name: Update Homebrew Tap
-    runs-on: macos-latest
-    needs: [prep, build, publish-npm]
-    if: ${{ needs.prep.outputs.is_prerelease == 'false' }}
-
-    steps:
-      - name: Checkout tap
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/homebrew-accountbox
-          path: tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Update formula
-        run: |
-          VERSION="${{ needs.prep.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
-          SHA256=$(curl -sL "https://registry.npmjs.org/accountbox/-/accountbox-${VERSION_NO_V}.tgz" | shasum -a 256 | cut -d' ' -f1)
-          sed -i '' "s/version \"[^\"]*\"/version \"${VERSION_NO_V}\"/" tap/Formula/accountbox.rb
-          sed -i '' "s/sha256 \"[^\"]*\"/sha256 \"${SHA256}\"/" tap/Formula/accountbox.rb
-          cat tap/Formula/accountbox.rb
-
-      - name: Commit and push
-        working-directory: ./tap
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/accountbox.rb
-          git commit -m "Update accountbox to ${{ needs.prep.outputs.version }}"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
 
   notify:
     name: Notify

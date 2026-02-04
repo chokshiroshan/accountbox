@@ -74,6 +74,8 @@ accountbox set claude <account>
 accountbox browser <account> <url>
 accountbox doctor
 accountbox run <toolId> [account] [args...]
+accountbox tools list|show|validate
+accountbox resolve <toolId> [--cwd <path>] [--json]
 ```
 
 ## Limits / Usage
@@ -141,6 +143,32 @@ You can add your own tool definitions in:
 ```
 
 Override the location with `ACCOUNTBOX_TOOLS_TOML`.
+
+### Tool “plugins” (TOML-only)
+
+Accountbox’s “plugin” system is intentionally simple: tools are defined in TOML (no JS execution).
+
+Example `~/.config/accountbox/tools.toml`:
+
+```toml
+[tools.aider]
+mode = "native"
+command = "aider"
+isolate = true
+
+[tools.gh]
+mode = "native"
+command = "gh"
+isolate = false
+```
+
+Inspect and validate:
+
+```bash
+accountbox tools list
+accountbox tools show aider --json
+accountbox tools validate
+```
 
 ## Browser sandboxing for login
 
@@ -225,3 +253,25 @@ Environment overrides:
 - Treat Codex `auth.json` like a password.
 - Don’t paste API keys/tokens into chat or issues.
 - Each account’s browser profile dir lives under `~/.accountbox/browser/<account>`.
+
+## Using with Clawdbot / OpenClaw
+
+Accountbox doesn’t integrate with Clawdbot directly (it won’t touch `~/.clawdbot/*`), but it’s useful when you’re operating Clawdbot/OpenClaw in multiple repos and juggling multiple Codex/Claude accounts.
+
+Recommended: set per-repo defaults in the repo you use for Clawdbot work (e.g. `~/clawd/.accountbox.toml`):
+
+```toml
+codex_account = "work"
+claude_account = "work"
+```
+
+Preflight before heavy work:
+
+```bash
+# Check which accounts have headroom
+accountbox codex limits
+
+# Resolve the default account for the current repo (scripts can use --json)
+accountbox resolve codex
+accountbox resolve codex --json
+```

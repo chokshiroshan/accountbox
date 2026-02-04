@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `accountbox codex whoami` (masked email) for debugging account mismatches
 - `accountbox codex status`, `logout`, `rebuild` helpers
 - Improved Codex login ergonomics (`--browser`, `--force`, `--fresh-browser`)
+- `accountbox tools list|show|validate` for tool/plugin configs
+- `accountbox resolve <toolId> [--cwd] [--json]` for script-friendly account resolution
+- `accountbox doctor --json` for machine-readable status
 
 ### Changed
 - Codex container image installs `ca-certificates` (fixes TLS failures in some environments)

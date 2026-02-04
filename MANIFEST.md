@@ -32,4 +32,4 @@ Accountbox is a Node.js CLI that runs Codex + Claude Code with:
 ## Known gaps
 
 - API-key based limits fetch is not implemented yet (`codex ... limits` only supports ChatGPT OAuth `auth.json`).
-- No test suite yet (workflows use smoke checks).
+- Test coverage is still light (CLI smoke tests exist under `test/`).
