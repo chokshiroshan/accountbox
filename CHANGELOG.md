@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-02-04
+
 ### Added
 - `accountbox codex limits` (fetches ChatGPT `wham/usage`) with `--json`, `--raw`, `--timeout-ms`, `--concurrency`
 - `accountbox codex whoami` (masked email) for debugging account mismatches

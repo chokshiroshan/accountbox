@@ -1,6 +1,6 @@
 {
   "name": "accountbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Per-account wrappers for Codex + Claude Code",
   "keywords": [
     "codex",
