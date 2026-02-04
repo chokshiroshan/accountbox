@@ -1,0 +1,53 @@
+{
+  "name": "accountbox",
+  "version": "0.1.0",
+  "description": "Per-account wrappers for Codex + Claude Code",
+  "keywords": [
+    "codex",
+    "claude",
+    "ai",
+    "cli",
+    "multi-account",
+    "docker"
+  ],
+  "author": "Roshan Chokshi",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "bin": {
+    "accountbox": "bin/accountbox.js",
+    "abox": "bin/accountbox.js"
+  },
+  "files": [
+    "bin/",
+    "Dockerfile.codex",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "start": "node bin/accountbox.js",
+    "install:local": "node bin/accountbox.js install",
+    "doctor": "node bin/accountbox.js doctor",
+    "lint": "node --check bin/accountbox.js",
+    "test": "node --test",
+    "build": "echo 'No build step required for this project'",
+    "prepack": "npm run lint && npm run test",
+    "preversion": "npm run test",
+    "version": "node -e \"console.log('Version bumped to ' + require('./package.json').version)\""
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "execa": "^9.6.1",
+    "find-up": "^8.0.0",
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {}
+}

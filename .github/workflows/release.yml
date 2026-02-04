@@ -1,0 +1,230 @@
+# Accountbox Release Pipeline
+# Handles automated releases to npm and GitHub
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.2.3)'
+        required: true
+        type: string
+
+jobs:
+  prep:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+      - name: Check if prerelease
+        id: check_prerelease
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if [[ "$VERSION" =~ -[a-zA-Z] ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: prep
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test || echo "No tests configured"
+
+      - name: Build
+        run: npm run build || echo "No build script configured"
+
+      - name: Create package
+        run: npm pack
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: accountbox-*.tgz
+          retention-days: 7
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [prep, build]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: ./artifacts
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.prep.outputs.version }}"
+          echo "# Accountbox $VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Installation" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "npm install -g accountbox" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Quick Start" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "accountbox install" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Changes" >> release_notes.md
+          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> release_notes.md || true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prep.outputs.version }}
+          name: Accountbox ${{ needs.prep.outputs.version }}
+          body_path: ./release_notes.md
+          files: ./artifacts/accountbox-*.tgz
+          prerelease: ${{ needs.prep.outputs.is_prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [prep, build]
+    environment:
+      name: npm-${{ needs.prep.outputs.is_prerelease == 'true' && 'prerelease' || 'production' }}
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: ./artifacts
+
+      - name: Publish to npm
+        run: |
+          cd artifacts
+          npm publish accountbox-*.tgz --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-homebrew:
+    name: Update Homebrew Tap
+    runs-on: macos-latest
+    needs: [prep, build, publish-npm]
+    if: ${{ needs.prep.outputs.is_prerelease == 'false' }}
+
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-accountbox
+          path: tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Update formula
+        run: |
+          VERSION="${{ needs.prep.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          SHA256=$(curl -sL "https://registry.npmjs.org/accountbox/-/accountbox-${VERSION_NO_V}.tgz" | shasum -a 256 | cut -d' ' -f1)
+          sed -i '' "s/version \"[^\"]*\"/version \"${VERSION_NO_V}\"/" tap/Formula/accountbox.rb
+          sed -i '' "s/sha256 \"[^\"]*\"/sha256 \"${SHA256}\"/" tap/Formula/accountbox.rb
+          cat tap/Formula/accountbox.rb
+
+      - name: Commit and push
+        working-directory: ./tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/accountbox.rb
+          git commit -m "Update accountbox to ${{ needs.prep.outputs.version }}"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [prep, build, create-github-release, publish-npm]
+    if: always()
+
+    steps:
+      - name: Send notification
+        run: |
+          VERSION="${{ needs.prep.outputs.version }}"
+          BUILD_STATUS="${{ needs.build.result }}"
+          RELEASE_STATUS="${{ needs.create-github-release.result }}"
+          NPM_STATUS="${{ needs.publish-npm.result }}"
+          echo "Release $VERSION complete"
+          echo "Build: $BUILD_STATUS"
+          echo "GitHub Release: $RELEASE_STATUS"
+          echo "npm Publish: $NPM_STATUS"

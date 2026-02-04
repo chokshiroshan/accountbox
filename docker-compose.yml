@@ -1,0 +1,55 @@
+# Accountbox Development Environment
+# Use this for local development with all dependencies
+
+version: '3.8'
+
+services:
+  # OrbStack-compatible Docker daemon for testing container workflows
+  codex-env:
+    image: accountbox-codex:dev
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+    volumes:
+      - .:/work
+      - codex-dev-home:/root/.codex
+    working_dir: /work
+    command: tail -f /dev/null
+    profiles:
+      - dev
+
+  # Test environment with multi-account simulation
+  test-runner:
+    image: node:22-bookworm-slim
+    volumes:
+      - .:/work
+    working_dir: /work
+    environment:
+      - ACCOUNTBOX_HOME=/tmp/accountbox-test
+    command: node bin/accountbox.js doctor
+    profiles:
+      - test
+
+  # Documentation preview server
+  docs-preview:
+    image: docsifyjs/docsify
+    volumes:
+      - .:/usr/share/nginx/html
+    ports:
+      - "3000:3000"
+    command: docsify serve .
+    profiles:
+      - docs
+
+  # Security scan environment
+  security-scan:
+    image: aquasec/trivy:latest
+    volumes:
+      - .:/work
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: image --exit-code 1 --severity HIGH,CRITICAL accountbox-codex:dev
+    profiles:
+      - security
+
+volumes:
+  codex-dev-home:
